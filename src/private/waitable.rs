@@ -67,6 +67,22 @@ where
         }
     }
 
+    pub fn wait_while_and_get_mut<Q>(
+        &self,
+        condition: impl Fn(&T) -> bool,
+        getter: impl Fn(&mut T) -> Q,
+    ) -> Q {
+        let mut state = self.state.lock();
+
+        loop {
+            if !condition(&state) {
+                return getter(&mut state);
+            }
+
+            state = self.cvar.wait(state);
+        }
+    }
+
     pub fn wait_timeout_while_and_get<F: Fn(&T) -> Result<bool, EspError>, G: Fn(&T) -> Q, Q>(
         &self,
         dur: Duration,
@@ -86,6 +102,29 @@ where
 
             if timeout {
                 return Ok((true, getter(&state)));
+            }
+        }
+    }
+
+    pub fn wait_timeout_while_and_get_mut<Q>(
+        &self,
+        dur: Duration,
+        condition: impl Fn(&T) -> bool,
+        getter: impl Fn(&mut T) -> Q,
+    ) -> (bool, Q) {
+        let mut state = self.state.lock();
+
+        loop {
+            if !condition(&state) {
+                return (false, getter(&mut state));
+            }
+
+            let (new_state, timeout) = self.cvar.wait_timeout(state, dur);
+
+            state = new_state;
+
+            if timeout {
+                return (true, getter(&mut state));
             }
         }
     }
